@@ -1,4 +1,0 @@
-{"timestamp":"00:00:00.526","source":"Server","level":"LOG","message":""}
-{"timestamp":"00:01:55.375","source":"Browser","level":"WARN","message":"Appwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint."}
-{"timestamp":"00:01:55.395","source":"Server","level":"WARN","message":"[browser] \"\\u001b[33mAppwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint.\\u001b[39m\" \"\\u001b[2m(<anonymous code>:1:147461)\\u001b[22m\""}
-{"timestamp":"00:01:55.395","source":"Browser","level":"WARN","message":"\u001b[33mAppwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint.\u001b[39m"}
