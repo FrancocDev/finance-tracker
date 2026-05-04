@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { groq } from "@ai-sdk/groq";
-import { generateObject } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
 import { getAuthenticatedUser } from "@/lib/auth-server";
 import { quickAddLimiter } from "@/lib/rate-limit";
@@ -43,10 +43,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { object } = await generateObject({
+    const { text: aiText } = await generateText({
       model: groq("llama-3.1-8b-instant"),
-      schema: transactionSchema,
-      prompt: `Parse the following natural language transaction into a structured object.
+      system: `You are a finance assistant. Parse natural language transactions into structured JSON.
 
 Rules:
 - Determine if it's income or expense based on context.
@@ -56,12 +55,21 @@ Rules:
 - Amount should be a positive number.
 - Description should be a clean, concise summary.
 
-Input: "${text.trim()}"
-
-Return a valid JSON object matching the schema.`,
+Return ONLY a JSON object with this exact shape (no markdown, no explanation):
+{"type":"income|expense","amount":0.00,"category":"Category","description":"Description","date":"YYYY-MM-DD"}`,
+      prompt: `Parse this transaction: "${text.trim()}"`,
     });
 
-    return NextResponse.json({ data: object });
+    // Extract JSON from response (handle potential markdown fences)
+    const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("No JSON found in AI response");
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const validated = transactionSchema.parse(parsed);
+
+    return NextResponse.json({ data: validated });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to parse transaction";
     return NextResponse.json({ error: message }, { status: 422 });
