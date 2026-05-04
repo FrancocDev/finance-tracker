@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { account, databases, DATABASE_ID, COLLECTIONS, Query, ID } from "@/lib/appwrite";
 import { localIncomes, localExpenses, localBudgets, getAllLocalData, clearAllLocalData } from "@/lib/localStorage";
+import { setAppwriteSessionToken, clearAppwriteSessionToken, getAppwriteSessionToken } from "@/lib/auth-client";
 import type { Transaction, Budget, TransactionInput, BudgetInput } from "@/lib/types";
 import type { Models } from "appwrite";
 import AddTransaction from "./AddTransaction";
@@ -38,6 +39,20 @@ export default function Dashboard() {
       try {
         const currentUser = await account.get();
         setUser(currentUser);
+        // If we don't have our custom token stored, try to extract from Appwrite's storage
+        if (!getAppwriteSessionToken()) {
+          const fallbackRaw = localStorage.getItem("cookieFallback");
+          if (fallbackRaw) {
+            try {
+              const parsed = JSON.parse(fallbackRaw);
+              if (Array.isArray(parsed) && parsed.length >= 2) {
+                setAppwriteSessionToken(parsed[1]);
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
         await loadRemoteData(currentUser.$id);
       } catch {
         setUser(null);
@@ -158,7 +173,10 @@ export default function Dashboard() {
     setAuthError("");
     setAuthLoading(true);
     try {
-      await account.createEmailPasswordSession(authEmail, authPassword);
+      const session = await account.createEmailPasswordSession(authEmail, authPassword);
+      if (session.secret) {
+        setAppwriteSessionToken(session.secret);
+      }
       const current = await account.get();
       await migrateLocalData(current);
       setUser(current);
@@ -187,6 +205,7 @@ export default function Dashboard() {
   const handleLogout = async () => {
     try {
       await account.deleteSession("current");
+      clearAppwriteSessionToken();
       setUser(null);
       loadLocalData();
     } catch (err: unknown) {
