@@ -8,6 +8,8 @@ import type { Models } from "appwrite";
 import AddTransaction from "./AddTransaction";
 import TransactionList from "./TransactionList";
 import BudgetManager from "./BudgetManager";
+import AIQuickAdd from "./AIQuickAdd";
+import AIReport from "./AIReport";
 
 export default function Dashboard() {
   const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null);
@@ -119,6 +121,14 @@ export default function Dashboard() {
       localExpenses.remove(id);
     }
     setExpenses((prev) => prev.filter((e) => e.$id !== id));
+  };
+
+  const handleAIParsed = async (data: TransactionInput & { type: "income" | "expense" }) => {
+    if (data.type === "income") {
+      await addIncome(data);
+    } else {
+      await addExpense(data);
+    }
   };
 
   const saveBudget = async (data: BudgetInput) => {
@@ -457,7 +467,7 @@ export default function Dashboard() {
 
       {/* Tabs */}
       <div style={tabsContainerStyle}>
-        {["overview", "incomes", "expenses", "budget"].map((tab) => (
+        {["overview", "incomes", "expenses", "budget", "ai-report"].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -475,14 +485,21 @@ export default function Dashboard() {
 
       {/* Tab Content */}
       {activeTab === "overview" && (
-        <div style={overviewGridStyle}>
-          <div>
-            <AddTransaction type="income" onAdd={addIncome} />
-            <TransactionList transactions={incomes.slice(0, 5)} type="income" onDelete={deleteIncome} />
-          </div>
-          <div>
-            <AddTransaction type="expense" onAdd={addExpense} />
-            <TransactionList transactions={expenses.slice(0, 5)} type="expense" onDelete={deleteExpense} />
+        <div>
+          <AIQuickAdd
+            user={user}
+            onAuthRequired={() => setShowAuth(true)}
+            onParsed={handleAIParsed}
+          />
+          <div style={overviewGridStyle}>
+            <div>
+              <AddTransaction type="income" onAdd={addIncome} />
+              <TransactionList transactions={incomes.slice(0, 5)} type="income" onDelete={deleteIncome} />
+            </div>
+            <div>
+              <AddTransaction type="expense" onAdd={addExpense} />
+              <TransactionList transactions={expenses.slice(0, 5)} type="expense" onDelete={deleteExpense} />
+            </div>
           </div>
         </div>
       )}
@@ -505,6 +522,17 @@ export default function Dashboard() {
         <div style={{ maxWidth: 600 }}>
           <BudgetManager budgets={budgets} onSave={saveBudget} />
         </div>
+      )}
+
+      {activeTab === "ai-report" && (
+        <AIReport
+          user={user}
+          onAuthRequired={() => setShowAuth(true)}
+          incomes={incomes}
+          expenses={expenses}
+          budgets={budgets}
+          currentMonth={currentMonth}
+        />
       )}
     </div>
   );
