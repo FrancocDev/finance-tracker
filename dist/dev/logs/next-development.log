@@ -1,7 +1,0 @@
-{"timestamp":"00:00:00.936","source":"Server","level":"LOG","message":""}
-{"timestamp":"00:00:29.181","source":"Browser","level":"WARN","message":"Appwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint."}
-{"timestamp":"00:00:29.184","source":"Server","level":"WARN","message":"[browser] \"\\u001b[33mAppwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint.\\u001b[39m\" \"\\u001b[2m(<anonymous code>:1:147461)\\u001b[22m\""}
-{"timestamp":"00:00:29.184","source":"Browser","level":"WARN","message":"\u001b[33mAppwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint.\u001b[39m"}
-{"timestamp":"00:00:38.286","source":"Browser","level":"WARN","message":"Appwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint."}
-{"timestamp":"00:00:38.287","source":"Server","level":"WARN","message":"[browser] \"\\u001b[33mAppwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint.\\u001b[39m\" \"\\u001b[2m(<anonymous code>:1:147461)\\u001b[22m\""}
-{"timestamp":"00:00:38.287","source":"Browser","level":"WARN","message":"\u001b[33mAppwrite is using localStorage for session management. Increase your security by adding a custom domain as your API endpoint.\u001b[39m"}
