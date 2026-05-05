@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import type { Transaction, Budget } from "@/lib/types";
 import { getAppwriteSessionToken } from "@/lib/auth-client";
 
@@ -183,23 +184,23 @@ export default function AIReport({
 
       {report && (
         <div style={reportStyle}>
-          <div dangerouslySetInnerHTML={{ __html: markdownToHtml(report) }} />
+          <ReactMarkdown
+            components={{
+              h1: ({ children }) => <h1 style={{ margin: "16px 0 8px", fontSize: 19, fontWeight: 800, color: "#0f172a" }}>{children}</h1>,
+              h2: ({ children }) => <h2 style={{ margin: "16px 0 8px", fontSize: 17, fontWeight: 700, color: "#0f172a" }}>{children}</h2>,
+              h3: ({ children }) => <h3 style={{ margin: "12px 0 6px", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>{children}</h3>,
+              p: ({ children }) => <p style={{ margin: "8px 0" }}>{children}</p>,
+              ul: ({ children }) => <ul style={{ margin: "8px 0", paddingLeft: 18 }}>{children}</ul>,
+              li: ({ children }) => <li style={{ margin: "4px 0" }}>{children}</li>,
+              strong: ({ children }) => <strong style={{ fontWeight: 700 }}>{children}</strong>,
+            }}
+          >
+            {report}
+          </ReactMarkdown>
         </div>
       )}
     </div>
   );
-}
-
-function markdownToHtml(md: string): string {
-  return md
-    .replace(/^### (.*$)/gim, "<h3 style='margin:12px 0 6px;font-size:15px;font-weight:700;color:#0f172a'>$1</h3>")
-    .replace(/^## (.*$)/gim, "<h2 style='margin:16px 0 8px;font-size:17px;font-weight:700;color:#0f172a'>$1</h2>")
-    .replace(/^# (.*$)/gim, "<h1 style='margin:16px 0 8px;font-size:19px;font-weight:800;color:#0f172a'>$1</h1>")
-    .replace(/\*\*(.*?)\*\*/gim, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/gim, "<em>$1</em>")
-    .replace(/^- (.*$)/gim, "<li style='margin:4px 0;padding-left:4px'>$1</li>")
-    .replace(/(<li.*<\/li>\n?)+/gim, (match) => `<ul style="margin:8px 0;padding-left:18px">${match}</ul>`)
-    .replace(/\n/gim, "<br />");
 }
 
 const containerStyle: React.CSSProperties = {

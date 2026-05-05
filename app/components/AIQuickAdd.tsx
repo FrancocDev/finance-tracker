@@ -109,7 +109,7 @@ export default function AIQuickAdd({ user, onAuthRequired, onParsed }: AIQuickAd
             cursor: isDisabled ? "not-allowed" : "pointer",
           }}
         >
-          {loading ? "Adding..." : "⭐ Add with AI"}
+          {loading ? "Adding..." : "✨ Add with AI"}
         </button>
       </div>
 
