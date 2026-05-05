@@ -139,10 +139,11 @@ export default function Dashboard() {
   };
 
   const handleAIParsed = async (data: TransactionInput & { type: "income" | "expense" }) => {
-    if (data.type === "income") {
-      await addIncome(data);
+    const { type, ...transactionData } = data;
+    if (type === "income") {
+      await addIncome(transactionData);
     } else {
-      await addExpense(data);
+      await addExpense(transactionData);
     }
   };
 
