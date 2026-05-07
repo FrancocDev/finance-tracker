@@ -29,7 +29,7 @@ export default function RootLayout({
         <Script
           src="https://francocdev-voiceloop.vercel.app/widget.js"
           strategy="afterInteractive"
-          data-api-key="vl_njuhtSTFUnUBpifJaQ7aMnenyOHHhiVt2LVxWCbWvwI"
+          data-api-key="vl_Mnl2AZZHfios9nPiqMXK6DHEgtlR4e8vl8msXICeKiY"
           data-site-url="https://francocdev-finance-tracker-ai.vercel.app/"
         />
         {children}
