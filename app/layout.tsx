@@ -27,7 +27,7 @@ export default function RootLayout({
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <Script
-          src="https://giddy-falcon-900.convex.site/widget.js"
+          src="https://francocdev-voiceloop.vercel.app/widget.js"
           strategy="afterInteractive"
           data-api-key="455e7e7160a1eced54e61382dfff639c357df50200527661254396291d0b0728"
           data-site-url="https://francocdev-finance-tracker-ai.vercel.app/"
