@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
   try {
     const { object } = await generateObject({
-      model: groq("llama-3.1-8b-instant"),
+      model: groq("openai/gpt-oss-20b"),
       schema: transactionSchema,
       prompt: `Parse this natural language transaction into structured data.
 
