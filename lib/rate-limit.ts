@@ -1,45 +1,71 @@
-interface RateLimitEntry {
-  tokens: number;
-  lastRefill: number;
+import { Redis } from "@upstash/redis";
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
+
+const PREFIX = "finance-tracker-ai";
+
+interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetInMs: number;
 }
 
-class TokenBucket {
-  private store = new Map<string, RateLimitEntry>();
+class SlidingWindowRateLimiter {
   private readonly capacity: number;
   private readonly windowMs: number;
+  private readonly name: string;
 
-  constructor(capacity: number, windowMinutes: number) {
+  constructor(name: string, capacity: number, windowMinutes: number) {
+    this.name = name;
     this.capacity = capacity;
     this.windowMs = windowMinutes * 60 * 1000;
   }
 
-  consume(key: string): { allowed: boolean; remaining: number; resetInMs: number } {
+  async consume(key: string): Promise<RateLimitResult> {
+    const redisKey = `${PREFIX}:ratelimit:${this.name}:${key}`;
     const now = Date.now();
-    let entry = this.store.get(key);
+    const windowStart = now - this.windowMs;
+    const member = `${now}:${Math.random().toString(36).slice(2, 8)}`;
 
-    if (!entry) {
-      entry = { tokens: this.capacity - 1, lastRefill: now };
-      this.store.set(key, entry);
-      return { allowed: true, remaining: entry.tokens, resetInMs: this.windowMs };
+    // Remove expired entries and count current ones in a single pipeline
+    const [count] = await redis
+      .pipeline()
+      .zremrangebyscore(redisKey, 0, windowStart)
+      .zcard(redisKey)
+      .exec();
+
+    const currentCount = count as number;
+
+    if (currentCount >= this.capacity) {
+      // Find the oldest entry to calculate when the window resets
+      const oldest = await redis.zrange(redisKey, 0, 0, { withScores: true });
+      const oldestScore = oldest.length > 0 ? (oldest[0] as { score: number }).score : now;
+      const resetInMs = oldestScore + this.windowMs - now;
+
+      return {
+        allowed: false,
+        remaining: 0,
+        resetInMs: Math.max(resetInMs, 0),
+      };
     }
 
-    const timePassed = now - entry.lastRefill;
-    const tokensToAdd = Math.floor(timePassed / this.windowMs) * this.capacity;
+    // Add the request and refresh TTL
+    await redis
+      .pipeline()
+      .zadd(redisKey, { score: now, member })
+      .pexpire(redisKey, this.windowMs)
+      .exec();
 
-    if (tokensToAdd > 0) {
-      entry.tokens = Math.min(this.capacity, entry.tokens + tokensToAdd);
-      entry.lastRefill = now;
-    }
-
-    if (entry.tokens >= 1) {
-      entry.tokens -= 1;
-      this.store.set(key, entry);
-      return { allowed: true, remaining: entry.tokens, resetInMs: this.windowMs - (now - entry.lastRefill) };
-    }
-
-    return { allowed: false, remaining: 0, resetInMs: this.windowMs - (now - entry.lastRefill) };
+    return {
+      allowed: true,
+      remaining: this.capacity - currentCount - 1,
+      resetInMs: this.windowMs,
+    };
   }
 }
 
-export const quickAddLimiter = new TokenBucket(20, 60); // 20 requests per hour
-export const reportLimiter = new TokenBucket(5, 60);   // 5 requests per hour
+export const quickAddLimiter = new SlidingWindowRateLimiter("quick-add", 20, 60);
+export const reportLimiter = new SlidingWindowRateLimiter("report", 5, 60);

@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Transaction, Budget } from "@/lib/types";
+import type { Models } from "appwrite";
 import { getAppwriteSessionToken } from "@/lib/auth-client";
 
 interface AIReportProps {
-  user: unknown | null;
+  user: Models.User<Models.Preferences> | null;
   onAuthRequired: () => void;
   incomes: Transaction[];
   expenses: Transaction[];

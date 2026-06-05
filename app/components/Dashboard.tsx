@@ -1,297 +1,75 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { account, databases, DATABASE_ID, COLLECTIONS, Query, ID } from "@/lib/appwrite";
-import { localIncomes, localExpenses, localBudgets, getAllLocalData, clearAllLocalData } from "@/lib/localStorage";
-import { setAppwriteSessionToken, clearAppwriteSessionToken, getAppwriteSessionToken } from "@/lib/auth-client";
-import type { Transaction, Budget, TransactionInput, BudgetInput } from "@/lib/types";
-import type { Models } from "appwrite";
+import type { TransactionInput, BudgetInput } from "@/lib/types";
 import AddTransaction from "./AddTransaction";
 import TransactionList from "./TransactionList";
 import BudgetManager from "./BudgetManager";
 import AIQuickAdd from "./AIQuickAdd";
 import AIReport from "./AIReport";
+import { useAuth } from "../hooks/useAuth";
+import { useTransactions } from "../hooks/useTransactions";
+import { useBudget } from "../hooks/useBudget";
 
 export default function Dashboard() {
-  const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null);
-  const [incomes, setIncomes] = useState<Transaction[]>([]);
-  const [expenses, setExpenses] = useState<Transaction[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<string>("overview");
-  const [showAuth, setShowAuth] = useState<boolean>(false);
-  const [currentMonth, setCurrentMonth] = useState<string>("");
-  const [migrating, setMigrating] = useState<boolean>(false);
+  const [currentMonth, setCurrentMonth] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
 
-  // Auth form state
-  const [authEmail, setAuthEmail] = useState<string>("");
-  const [authPassword, setAuthPassword] = useState<string>("");
-  const [authName, setAuthName] = useState<string>("");
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [authError, setAuthError] = useState<string>("");
-  const [authLoading, setAuthLoading] = useState<boolean>(false);
+  // Auth
+  const auth = useAuth(async (user) => {
+    await transactions.loadRemoteData(user.$id);
+    await budgets.loadRemoteBudgets(user.$id);
+  });
+
+  // Data
+  const transactions = useTransactions(auth.user);
+  const budgets = useBudget(auth.user);
 
   useEffect(() => {
     setCurrentMonth(new Date().toISOString().slice(0, 7));
 
-    const init = async () => {
-      setLoading(true);
-      try {
-        const currentUser = await account.get();
-        setUser(currentUser);
-        // If we don't have our custom token stored, try to extract from Appwrite's storage
-        if (!getAppwriteSessionToken()) {
-          const fallbackRaw = localStorage.getItem("cookieFallback");
-          if (fallbackRaw) {
-            try {
-              const parsed = JSON.parse(fallbackRaw);
-              if (Array.isArray(parsed) && parsed.length >= 2) {
-                setAppwriteSessionToken(parsed[1]);
-              }
-            } catch {
-              // ignore
-            }
-          }
-        }
-        await loadRemoteData(currentUser.$id);
-      } catch {
-        setUser(null);
-        loadLocalData();
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
-  }, []);
-
-  const loadLocalData = () => {
-    setIncomes(localIncomes.getAll());
-    setExpenses(localExpenses.getAll());
-    setBudgets(localBudgets.getAll());
-  };
-
-  const loadRemoteData = async (userId: string) => {
-    try {
-      const [incomesRes, expensesRes, budgetsRes] = await Promise.all([
-        databases.listDocuments(DATABASE_ID, COLLECTIONS.INCOMES, [
-          Query.equal("userId", userId),
-          Query.orderDesc("date"),
-        ]),
-        databases.listDocuments(DATABASE_ID, COLLECTIONS.EXPENSES, [
-          Query.equal("userId", userId),
-          Query.orderDesc("date"),
-        ]),
-        databases.listDocuments(DATABASE_ID, COLLECTIONS.BUDGETS, [Query.equal("userId", userId)]),
-      ]);
-
-      setIncomes(incomesRes.documents as unknown as Transaction[]);
-      setExpenses(expensesRes.documents as unknown as Transaction[]);
-      setBudgets(budgetsRes.documents as unknown as Budget[]);
-    } catch (err: unknown) {
-      console.error("Error loading remote data:", err);
+    // Load local data when no user is found after auth init
+    if (!auth.loading && !auth.user) {
+      transactions.loadLocalData();
+      budgets.loadLocalBudgets();
     }
-  };
+  }, [auth.loading, auth.user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- CRUD callbacks ----
-
-  const addIncome = async (data: TransactionInput) => {
-    if (user) {
-      const doc = await databases.createDocument(DATABASE_ID, COLLECTIONS.INCOMES, ID.unique(), {
-        ...data,
-        userId: user.$id,
-      });
-      setIncomes((prev) => [doc as unknown as Transaction, ...prev]);
-    } else {
-      const item = localIncomes.add(data);
-      setIncomes((prev) => [item, ...prev]);
-    }
-  };
-
-  const deleteIncome = async (id: string) => {
-    if (user) {
-      await databases.deleteDocument(DATABASE_ID, COLLECTIONS.INCOMES, id);
-    } else {
-      localIncomes.remove(id);
-    }
-    setIncomes((prev) => prev.filter((i) => i.$id !== id));
-  };
-
-  const addExpense = async (data: TransactionInput) => {
-    if (user) {
-      const doc = await databases.createDocument(DATABASE_ID, COLLECTIONS.EXPENSES, ID.unique(), {
-        ...data,
-        userId: user.$id,
-      });
-      setExpenses((prev) => [doc as unknown as Transaction, ...prev]);
-    } else {
-      const item = localExpenses.add(data);
-      setExpenses((prev) => [item, ...prev]);
-    }
-  };
-
-  const deleteExpense = async (id: string) => {
-    if (user) {
-      await databases.deleteDocument(DATABASE_ID, COLLECTIONS.EXPENSES, id);
-    } else {
-      localExpenses.remove(id);
-    }
-    setExpenses((prev) => prev.filter((e) => e.$id !== id));
-  };
-
-  const handleAIParsed = async (data: TransactionInput & { type: "income" | "expense" }) => {
-    const { type, ...transactionData } = data;
-    if (type === "income") {
-      await addIncome(transactionData);
-    } else {
-      await addExpense(transactionData);
-    }
-  };
-
-  const saveBudget = async (data: BudgetInput) => {
-    if (user) {
-      const existing = budgets.find((b) => b.month === data.month);
-      if (existing) {
-        await databases.updateDocument(DATABASE_ID, COLLECTIONS.BUDGETS, existing.$id, {
-          amount: data.amount,
-        });
-        setBudgets((prev) => prev.map((b) => (b.$id === existing.$id ? { ...b, amount: data.amount } : b)));
-      } else {
-        const doc = await databases.createDocument(DATABASE_ID, COLLECTIONS.BUDGETS, ID.unique(), {
-          ...data,
-          userId: user.$id,
-        });
-        setBudgets((prev) => [...prev, doc as unknown as Budget]);
-      }
-    } else {
-      localBudgets.set(data);
-      setBudgets(localBudgets.getAll());
-    }
-  };
-
-  // ---- Auth ----
-
+  // Wrap login to handle migration
   const handleLogin = async () => {
-    setAuthError("");
-    setAuthLoading(true);
-    try {
-      const session = await account.createEmailPasswordSession(authEmail, authPassword);
-      if (session.secret) {
-        setAppwriteSessionToken(session.secret);
-      }
-      const current = await account.get();
-      await migrateLocalData(current);
-      setUser(current);
-      setShowAuth(false);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Login failed";
-      setAuthError(message);
-    } finally {
-      setAuthLoading(false);
-    }
+    const user = await auth.handleLogin();
+    await transactions.migrateLocalData(user, async () => {
+      await budgets.loadRemoteBudgets(user.$id);
+    });
   };
 
-  const handleRegister = async () => {
-    setAuthError("");
-    setAuthLoading(true);
-    try {
-      await account.create(ID.unique(), authEmail, authPassword, authName);
-      await handleLogin();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Registration failed";
-      setAuthError(message);
-      setAuthLoading(false);
-    }
-  };
-
+  // Wrap logout to load local data
   const handleLogout = async () => {
-    try {
-      await account.deleteSession("current");
-      clearAppwriteSessionToken();
-      setUser(null);
-      loadLocalData();
-    } catch (err: unknown) {
-      console.error("Logout error:", err);
-    }
-  };
-
-  // ---- Migration ----
-
-  const migrateLocalData = async (currentUser: Models.User<Models.Preferences>) => {
-    const local = getAllLocalData();
-    const hasLocalData = local.incomes.length > 0 || local.expenses.length > 0 || local.budgets.length > 0;
-    if (!hasLocalData) {
-      await loadRemoteData(currentUser.$id);
-      return;
-    }
-
-    setMigrating(true);
-    try {
-      for (const item of local.incomes) {
-        await databases.createDocument(DATABASE_ID, COLLECTIONS.INCOMES, ID.unique(), {
-          amount: item.amount,
-          description: item.description,
-          category: item.category,
-          date: item.date,
-          userId: currentUser.$id,
-        });
-      }
-      for (const item of local.expenses) {
-        await databases.createDocument(DATABASE_ID, COLLECTIONS.EXPENSES, ID.unique(), {
-          amount: item.amount,
-          description: item.description,
-          category: item.category,
-          date: item.date,
-          userId: currentUser.$id,
-        });
-      }
-      for (const item of local.budgets) {
-        const existing = (
-          await databases.listDocuments(DATABASE_ID, COLLECTIONS.BUDGETS, [
-            Query.equal("userId", currentUser.$id),
-            Query.equal("month", item.month),
-          ])
-        ).documents[0];
-
-        if (existing) {
-          await databases.updateDocument(DATABASE_ID, COLLECTIONS.BUDGETS, existing.$id, {
-            amount: item.amount,
-          });
-        } else {
-          await databases.createDocument(DATABASE_ID, COLLECTIONS.BUDGETS, ID.unique(), {
-            amount: item.amount,
-            period: item.period,
-            month: item.month,
-            userId: currentUser.$id,
-          });
-        }
-      }
-
-      clearAllLocalData();
-      await loadRemoteData(currentUser.$id);
-    } catch (err: unknown) {
-      console.error("Migration error:", err);
-      alert("Some local data could not be migrated. Please try again or contact support.");
-    } finally {
-      setMigrating(false);
-    }
+    await auth.handleLogout();
+    transactions.loadLocalData();
+    budgets.loadLocalBudgets();
   };
 
   // ---- Derived state ----
 
-  const totalIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
-  const totalExpense = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalIncome = transactions.incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
+  const totalExpense = transactions.expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const balance = totalIncome - totalExpense;
 
-  const currentBudget = budgets.find((b) => b.month === currentMonth);
-  const monthlyExpenses = expenses
+  const currentBudget = budgets.budgets.find((b) => b.month === currentMonth);
+  const monthlyExpenses = transactions.expenses
     .filter((e) => e.date?.startsWith(currentMonth))
     .reduce((sum, e) => sum + (e.amount || 0), 0);
   const budgetRemaining = currentBudget ? currentBudget.amount - monthlyExpenses : null;
   const budgetPercent = currentBudget ? (monthlyExpenses / currentBudget.amount) * 100 : 0;
 
-  const hasLocalData = !user && (incomes.length > 0 || expenses.length > 0 || budgets.length > 0);
+  const hasLocalData =
+    !auth.user &&
+    (transactions.incomes.length > 0 ||
+      transactions.expenses.length > 0 ||
+      budgets.budgets.length > 0);
 
-  if (loading) {
+  if (auth.loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, color: "#64748b" }}>
@@ -309,12 +87,12 @@ export default function Dashboard() {
         <div>
           <h1 style={titleStyle}>Finance Tracker</h1>
           <p style={subtitleStyle}>
-            {user
-              ? `Welcome back, ${user.name || user.email}`
+            {auth.user
+              ? `Welcome back, ${auth.user.name || auth.user.email}`
               : "Track your finances locally — save to the cloud anytime"}
           </p>
         </div>
-        {user ? (
+        {auth.user ? (
           <button onClick={handleLogout} style={logoutButtonStyle}>
             Logout
           </button>
@@ -322,8 +100,8 @@ export default function Dashboard() {
           <div style={{ display: "flex", gap: 10 }}>
             <button
               onClick={() => {
-                setAuthMode("login");
-                setShowAuth(true);
+                auth.setAuthMode("login");
+                auth.setShowAuth(true);
               }}
               style={loginButtonStyle}
             >
@@ -331,8 +109,8 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => {
-                setAuthMode("register");
-                setShowAuth(true);
+                auth.setAuthMode("register");
+                auth.setShowAuth(true);
               }}
               style={saveButtonStyle}
             >
@@ -346,7 +124,9 @@ export default function Dashboard() {
       {hasLocalData && (
         <div style={ctaBannerStyle}>
           <div>
-            <strong>You have {incomes.length + expenses.length} local record(s)</strong>
+            <strong>
+              You have {transactions.incomes.length + transactions.expenses.length} local record(s)
+            </strong>
             <p style={{ margin: "4px 0 0", fontSize: 13, color: "#475569" }}>
               Your data is saved in this browser. Sign in to back it up to the cloud.
             </p>
@@ -354,8 +134,8 @@ export default function Dashboard() {
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => {
-                setAuthMode("login");
-                setShowAuth(true);
+                auth.setAuthMode("login");
+                auth.setShowAuth(true);
               }}
               style={ctaSecondaryButtonStyle}
             >
@@ -363,8 +143,8 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => {
-                setAuthMode("register");
-                setShowAuth(true);
+                auth.setAuthMode("register");
+                auth.setShowAuth(true);
               }}
               style={ctaButtonStyle}
             >
@@ -375,7 +155,7 @@ export default function Dashboard() {
       )}
 
       {/* Migration overlay */}
-      {migrating && (
+      {transactions.migrating && (
         <div style={overlayStyle}>
           <div style={overlayContentStyle}>
             <span style={spinnerStyle} />
@@ -388,70 +168,75 @@ export default function Dashboard() {
       )}
 
       {/* Auth Modal */}
-      {showAuth && (
-        <div style={modalOverlayStyle} onClick={() => setShowAuth(false)}>
+      {auth.showAuth && (
+        <div style={modalOverlayStyle} onClick={() => auth.setShowAuth(false)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowAuth(false)} style={modalCloseStyle}>
+            <button onClick={() => auth.setShowAuth(false)} style={modalCloseStyle}>
               ×
             </button>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ fontSize: 40, marginBottom: 8 }}>☁️</div>
               <h2 style={{ margin: 0, fontSize: 20 }}>
-                {authMode === "login" ? "Sign In" : "Create Account"}
+                {auth.authMode === "login" ? "Sign In" : "Create Account"}
               </h2>
               <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 14 }}>
-                {authMode === "login"
+                {auth.authMode === "login"
                   ? "Access your data from anywhere"
                   : "Start tracking in the cloud"}
               </p>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {authMode === "register" && (
+              {auth.authMode === "register" && (
                 <input
                   type="text"
                   placeholder="Full Name"
-                  value={authName}
-                  onChange={(e) => setAuthName(e.target.value)}
+                  value={auth.authName}
+                  onChange={(e) => auth.setAuthName(e.target.value)}
                   style={modalInputStyle}
                 />
               )}
               <input
                 type="email"
                 placeholder="Email"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
+                value={auth.authEmail}
+                onChange={(e) => auth.setAuthEmail(e.target.value)}
                 style={modalInputStyle}
               />
               <input
                 type="password"
                 placeholder="Password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
+                value={auth.authPassword}
+                onChange={(e) => auth.setAuthPassword(e.target.value)}
                 style={modalInputStyle}
               />
               <button
-                onClick={authMode === "login" ? handleLogin : handleRegister}
-                disabled={authLoading}
+                onClick={auth.authMode === "login" ? handleLogin : auth.handleRegister}
+                disabled={auth.authLoading}
                 style={modalButtonStyle}
               >
-                {authLoading ? "Loading..." : authMode === "login" ? "Sign In" : "Create Account"}
+                {auth.authLoading
+                  ? "Loading..."
+                  : auth.authMode === "login"
+                    ? "Sign In"
+                    : "Create Account"}
               </button>
               <p style={{ textAlign: "center", fontSize: 13, color: "#64748b", margin: 0 }}>
-                {authMode === "login" ? "Don't have an account? " : "Already have an account? "}
+                {auth.authMode === "login"
+                  ? "Don't have an account? "
+                  : "Already have an account? "}
                 <button
                   onClick={() => {
-                    setAuthMode(authMode === "login" ? "register" : "login");
-                    setAuthError("");
+                    auth.setAuthMode(auth.authMode === "login" ? "register" : "login");
                   }}
                   style={{ ...linkStyle, background: "none", border: "none", cursor: "pointer" }}
                 >
-                  {authMode === "login" ? "Register" : "Sign In"}
+                  {auth.authMode === "login" ? "Register" : "Sign In"}
                 </button>
               </p>
             </div>
 
-            {authError && <div style={errorStyle}>{authError}</div>}
+            {auth.authError && <div style={errorStyle}>{auth.authError}</div>}
           </div>
         </div>
       )}
@@ -468,7 +253,12 @@ export default function Dashboard() {
         <div style={budgetBarContainerStyle}>
           <div style={budgetBarHeaderStyle}>
             <span style={budgetBarLabelStyle}>Budget ({currentMonth})</span>
-            <span style={{ fontWeight: 700, color: budgetRemaining && budgetRemaining >= 0 ? "#10b981" : "#ef4444" }}>
+            <span
+              style={{
+                fontWeight: 700,
+                color: budgetRemaining && budgetRemaining >= 0 ? "#10b981" : "#ef4444",
+              }}
+            >
               ${budgetRemaining?.toFixed(2)} remaining
             </span>
           </div>
@@ -477,48 +267,44 @@ export default function Dashboard() {
               style={{
                 ...progressFillStyle,
                 width: `${Math.min(budgetPercent, 100)}%`,
-                background: budgetPercent > 90 ? "#ef4444" : budgetPercent > 75 ? "#f59e0b" : "#10b981",
+                background:
+                  budgetPercent > 90 ? "#ef4444" : budgetPercent > 75 ? "#f59e0b" : "#10b981",
               }}
             />
           </div>
-          <p style={progressTextStyle}>${monthlyExpenses.toFixed(2)} of ${currentBudget.amount.toFixed(2)}</p>
+          <p style={progressTextStyle}>
+            ${monthlyExpenses.toFixed(2)} of ${currentBudget.amount.toFixed(2)}
+          </p>
         </div>
       )}
 
       {/* Tabs */}
-      <div style={tabsContainerStyle}>
-        {["overview", "incomes", "expenses", "budget", "ai-report"].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              ...tabButtonStyle,
-              borderBottomColor: activeTab === tab ? "#0f172a" : "transparent",
-              color: activeTab === tab ? "#0f172a" : "#64748b",
-              fontWeight: activeTab === tab ? 600 : 400,
-            }}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-      </div>
+      <Tabs activeTab={activeTab} onChange={setActiveTab} />
 
       {/* Tab Content */}
       {activeTab === "overview" && (
         <div>
           <AIQuickAdd
-            user={user}
-            onAuthRequired={() => setShowAuth(true)}
-            onParsed={handleAIParsed}
+            user={auth.user}
+            onAuthRequired={() => auth.setShowAuth(true)}
+            onParsed={transactions.handleAIParsed}
           />
           <div style={overviewGridStyle}>
             <div>
-              <AddTransaction type="income" onAdd={addIncome} />
-              <TransactionList transactions={incomes.slice(0, 5)} type="income" onDelete={deleteIncome} />
+              <AddTransaction type="income" onAdd={transactions.addIncome} />
+              <TransactionList
+                transactions={transactions.incomes.slice(0, 5)}
+                type="income"
+                onDelete={transactions.deleteIncome}
+              />
             </div>
             <div>
-              <AddTransaction type="expense" onAdd={addExpense} />
-              <TransactionList transactions={expenses.slice(0, 5)} type="expense" onDelete={deleteExpense} />
+              <AddTransaction type="expense" onAdd={transactions.addExpense} />
+              <TransactionList
+                transactions={transactions.expenses.slice(0, 5)}
+                type="expense"
+                onDelete={transactions.deleteExpense}
+              />
             </div>
           </div>
         </div>
@@ -526,31 +312,39 @@ export default function Dashboard() {
 
       {activeTab === "incomes" && (
         <div style={{ maxWidth: 600 }}>
-          <AddTransaction type="income" onAdd={addIncome} />
-          <TransactionList transactions={incomes} type="income" onDelete={deleteIncome} />
+          <AddTransaction type="income" onAdd={transactions.addIncome} />
+          <TransactionList
+            transactions={transactions.incomes}
+            type="income"
+            onDelete={transactions.deleteIncome}
+          />
         </div>
       )}
 
       {activeTab === "expenses" && (
         <div style={{ maxWidth: 600 }}>
-          <AddTransaction type="expense" onAdd={addExpense} />
-          <TransactionList transactions={expenses} type="expense" onDelete={deleteExpense} />
+          <AddTransaction type="expense" onAdd={transactions.addExpense} />
+          <TransactionList
+            transactions={transactions.expenses}
+            type="expense"
+            onDelete={transactions.deleteExpense}
+          />
         </div>
       )}
 
       {activeTab === "budget" && (
         <div style={{ maxWidth: 600 }}>
-          <BudgetManager budgets={budgets} onSave={saveBudget} />
+          <BudgetManager budgets={budgets.budgets} onSave={budgets.saveBudget} />
         </div>
       )}
 
       {activeTab === "ai-report" && (
         <AIReport
-          user={user}
-          onAuthRequired={() => setShowAuth(true)}
-          incomes={incomes}
-          expenses={expenses}
-          budgets={budgets}
+          user={auth.user}
+          onAuthRequired={() => auth.setShowAuth(true)}
+          incomes={transactions.incomes}
+          expenses={transactions.expenses}
+          budgets={budgets.budgets}
           currentMonth={currentMonth}
         />
       )}
@@ -558,10 +352,51 @@ export default function Dashboard() {
   );
 }
 
-function SummaryCard({ title, amount, color, icon }: { title: string; amount: number; color: string; icon?: string }) {
+// ---- Sub-components ----
+
+function Tabs({ activeTab, onChange }: { activeTab: string; onChange: (tab: string) => void }) {
+  return (
+    <div style={tabsContainerStyle}>
+      {["overview", "incomes", "expenses", "budget", "ai-report"].map((tab) => (
+        <button
+          key={tab}
+          onClick={() => onChange(tab)}
+          style={{
+            ...tabButtonStyle,
+            borderBottomColor: activeTab === tab ? "#0f172a" : "transparent",
+            color: activeTab === tab ? "#0f172a" : "#64748b",
+            fontWeight: activeTab === tab ? 600 : 400,
+          }}
+        >
+          {tab.charAt(0).toUpperCase() + tab.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  amount,
+  color,
+  icon,
+}: {
+  title: string;
+  amount: number;
+  color: string;
+  icon?: string;
+}) {
   return (
     <div style={cardStyle}>
-      <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 }}>
+      <div
+        style={{
+          fontSize: 12,
+          color: "#64748b",
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          fontWeight: 600,
+        }}
+      >
         {icon} {title}
       </div>
       <div style={{ fontSize: 28, fontWeight: 800, color, marginTop: 8, letterSpacing: -0.5 }}>

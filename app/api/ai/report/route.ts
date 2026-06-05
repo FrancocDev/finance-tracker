@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
-  const limit = reportLimiter.consume(user.$id);
+  const limit = await reportLimiter.consume(user.$id);
   if (!limit.allowed) {
     const minutes = Math.ceil(limit.resetInMs / 60000);
     return NextResponse.json(

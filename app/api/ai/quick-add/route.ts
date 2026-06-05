@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { groq } from "@ai-sdk/groq";
-import { generateText } from "ai";
+import { generateObject } from "ai";
 import { z } from "zod";
 import { getAuthenticatedUser } from "@/lib/auth-server";
 import { quickAddLimiter } from "@/lib/rate-limit";
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
-  const limit = quickAddLimiter.consume(user.$id);
+  const limit = await quickAddLimiter.consume(user.$id);
   if (!limit.allowed) {
     const minutes = Math.ceil(limit.resetInMs / 60000);
     return NextResponse.json(
@@ -43,9 +43,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { text: aiText } = await generateText({
+    const { object } = await generateObject({
       model: groq("llama-3.1-8b-instant"),
-      system: `You are a finance assistant. Parse natural language transactions into structured JSON.
+      schema: transactionSchema,
+      prompt: `Parse this natural language transaction into structured data.
 
 Rules:
 - Determine if it's income or expense based on context.
@@ -55,21 +56,10 @@ Rules:
 - Amount should be a positive number.
 - Description should be a clean, concise summary.
 
-Return ONLY a JSON object with this exact shape (no markdown, no explanation):
-{"type":"income|expense","amount":0.00,"category":"Category","description":"Description","date":"YYYY-MM-DD"}`,
-      prompt: `Parse this transaction: "${text.trim()}"`,
+Transaction: "${text.trim()}"`,
     });
 
-    // Extract JSON from response (handle potential markdown fences)
-    const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("No JSON found in AI response");
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    const validated = transactionSchema.parse(parsed);
-
-    return NextResponse.json({ data: validated });
+    return NextResponse.json({ data: object });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to parse transaction";
     return NextResponse.json({ error: message }, { status: 422 });

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { TransactionInput } from "@/lib/types";
+import type { Models } from "appwrite";
 import { getAppwriteSessionToken } from "@/lib/auth-client";
 
 interface ParsedTransaction extends TransactionInput {
@@ -9,7 +10,7 @@ interface ParsedTransaction extends TransactionInput {
 }
 
 interface AIQuickAddProps {
-  user: unknown | null;
+  user: Models.User<Models.Preferences> | null;
   onAuthRequired: () => void;
   onParsed: (data: ParsedTransaction) => void;
 }
