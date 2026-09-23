@@ -32,7 +32,7 @@ function addDays(date: Date, days: number): Date {
 }
 
 function parseAmount(text: string): number | null {
-  const matches = [...text.matchAll(/(?:[$€£]\s*)?(\d[\d.,]*)(?:\s*(k|m|mil))?/gi)]
+  const matches = [...text.matchAll(/(?:[$€£]\s*)?(\d[\d.,]*)(?:\s*(k|m|mil)\b)?/gi)]
     .map((match) => ({
       raw: match[0],
       value: match[1],
