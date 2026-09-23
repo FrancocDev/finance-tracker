@@ -83,12 +83,12 @@ export default function AIQuickAdd({ user, onAuthRequired, onParsed }: AIQuickAd
   return (
     <div style={containerStyle}>
       <h3 style={titleStyle}>
-        <span style={sparkleStyle}>✨</span> AI Quick Add
+        <span style={sparkleStyle}>✨</span> Jev Quick Add
       </h3>
       <p style={subtitleStyle}>
         {user
-          ? "Describe a transaction in plain English and let AI fill it in for you."
-          : "Sign in to use AI-powered transaction entry."}
+          ? "Describe a transaction in plain English and let Jev classify it for you."
+          : "Sign in to use Jev-powered transaction entry."}
       </p>
 
       <div style={inputRowStyle}>
@@ -110,7 +110,7 @@ export default function AIQuickAdd({ user, onAuthRequired, onParsed }: AIQuickAd
             cursor: isDisabled ? "not-allowed" : "pointer",
           }}
         >
-          {loading ? "Adding..." : "✨ Add with AI"}
+          {loading ? "Adding..." : "✨ Add with Jev"}
         </button>
       </div>
 
@@ -118,7 +118,7 @@ export default function AIQuickAdd({ user, onAuthRequired, onParsed }: AIQuickAd
 
       {!user && (
         <button onClick={onAuthRequired} style={authPromptStyle}>
-          Sign in to use AI Quick Add
+          Sign in to use Jev Quick Add
         </button>
       )}
     </div>

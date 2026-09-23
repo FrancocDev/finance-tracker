@@ -135,10 +135,10 @@ export default function AIReport({
   if (!user) {
     return (
       <div style={containerStyle}>
-        <h3 style={titleStyle}>🤖 AI Report</h3>
-        <p style={subtitleStyle}>Sign in to generate AI-powered financial reports.</p>
+        <h3 style={titleStyle}>🤖 Jev Report</h3>
+        <p style={subtitleStyle}>Sign in to generate TypeSafe-powered financial reports.</p>
         <button onClick={onAuthRequired} style={authButtonStyle}>
-          Sign In to Use AI Report
+          Sign In to Use Jev Report
         </button>
       </div>
     );
@@ -146,8 +146,8 @@ export default function AIReport({
 
   return (
     <div style={containerStyle}>
-      <h3 style={titleStyle}>🤖 AI Report</h3>
-      <p style={subtitleStyle}>Analyze your finances with AI-generated insights.</p>
+      <h3 style={titleStyle}>🤖 Jev Report</h3>
+      <p style={subtitleStyle}>Analyze your finances with typed Jev signals and clear metrics.</p>
 
       <div style={rangeRowStyle}>
         <div style={rangeFieldStyle}>
